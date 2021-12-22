@@ -24,9 +24,9 @@ namespace mr {
 
         constexpr virtual ~constexpr_function_ptr_base() {};
 
-        constexpr virtual constexpr_function_ptr_base* copy() const           = 0;
-        constexpr virtual void                         destroy(bool) noexcept = 0;
-        constexpr virtual Ret                          call(Args&&...)        = 0;
+        constexpr virtual constexpr_function_ptr_base* copy() const       = 0;
+        constexpr virtual void                         destroy() noexcept = 0;
+        constexpr virtual Ret                          call(Args&&...)    = 0;
     };
 
     template < class Callable, class Ret, class... Args >
@@ -52,7 +52,7 @@ namespace mr {
             return std::invoke(callable, std::forward< Args >(args)...); // invoke_r C++23
         }
 
-        constexpr void destroy(bool dealloc) noexcept override {
+        constexpr void destroy() noexcept override {
             delete this;
         }
 
@@ -93,12 +93,18 @@ namespace mr {
             if (rhs.ptr) {
                 ptr = rhs.ptr->copy();
             }
+            else {
+                finalise();
+            }
         }
 
         constexpr void do_move(constexpr_function_base&& rhs) noexcept {
             if (rhs.ptr) {
                 ptr = std::exchange(rhs.ptr, nullptr);
                 rhs.finalise();
+            }
+            else {
+                finalise();
             }
         }
 
@@ -114,15 +120,13 @@ namespace mr {
 
         constexpr void finalise() noexcept {
             if (ptr) {
-                ptr->destroy(true);
+                ptr->destroy();
                 ptr = nullptr;
             }
         }
 
         constexpr void do_swap(constexpr_function_base& rhs) noexcept {
-            auto* tmp = ptr;
-            ptr       = rhs.ptr;
-            rhs.ptr   = tmp;
+            std::swap(ptr, rhs.ptr);
         }
 
       private:
