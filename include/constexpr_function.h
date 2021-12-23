@@ -3,7 +3,8 @@
 
 // Warning: the code in this header is not of a production code quality, please be careful if you decided to use it.
 
-// Credits: this code mimics the behaviour of std::function from MSVC's STL, with changes to allow for constexpr compilation.
+// Credits: this code mimics the behaviour of std::function from MSVC's STL, with changes to allow for constexpr
+// compilation.
 
     #include <bit>
     #include <cstddef>
@@ -74,8 +75,7 @@ namespace mr {
             if (!ptr) {
                 throw std::bad_function_call {};
             }
-            const auto m_constexpr_function_impl = ptr;
-            return m_constexpr_function_impl->call(std::forward< Args >(args)...);
+            return ptr->call(std::forward< Args >(args)...);
         }
 
         constexpr ~constexpr_function_base() noexcept {
@@ -92,8 +92,7 @@ namespace mr {
         constexpr void do_copy(const constexpr_function_base& rhs) {
             if (rhs.ptr) {
                 ptr = rhs.ptr->copy();
-            }
-            else {
+            } else {
                 finalise();
             }
         }
@@ -102,8 +101,7 @@ namespace mr {
             if (rhs.ptr) {
                 ptr = std::exchange(rhs.ptr, nullptr);
                 rhs.finalise();
-            }
-            else {
+            } else {
                 finalise();
             }
         }
@@ -111,7 +109,7 @@ namespace mr {
         template < class F >
         constexpr void do_reset(F&& func) {
             // if not callable do nothing
-            // todo
+            // Todo
 
             using Impl = constexpr_function_impl< std::decay_t< F >, Ret, Args... >;
             auto impl  = new Impl { std::forward< F >(func) };
@@ -148,8 +146,7 @@ namespace mr {
         };
         template < class Ret, class... Args >
         struct get_constexpr_function_base< Ret(Args...) noexcept > {
-            static_assert(Eval_to_false< Ret(Args...) noexcept >,
-                          "Incorrect behaviour: noexcept function type was passed to std::function!");
+            using type = constexpr_function_base< Ret, Args... >;
         };
 
         template < class T >

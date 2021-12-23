@@ -7,3 +7,9 @@ cmake_install.cmake
 install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
+
+# Visual studio and build files
+/.vs/
+/tests/out/
+/bin/
+/tests/build/

@@ -1,3 +1,4 @@
+#include <cassert>
 #include <constexpr_function.h>
 
 constexpr int sum(int x, int y) {
@@ -46,6 +47,6 @@ constexpr int constexpr_main() {
 }
 
 int main() {
-    constexpr_main();
+    assert(10 == constexpr_main());
     static_assert(10 == constexpr_main());
 }
