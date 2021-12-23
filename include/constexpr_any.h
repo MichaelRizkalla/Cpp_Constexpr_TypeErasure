@@ -23,8 +23,7 @@ namespace mr {
             constexpr virtual ~any_type_base() {
             }
 
-            constexpr virtual any_type_base* do_copy() const       = 0;
-            constexpr virtual void           do_destroy() noexcept = 0;
+            constexpr virtual any_type_base* do_copy() const = 0;
         };
 
         template < class T >
@@ -43,10 +42,6 @@ namespace mr {
                 static_assert(std::copy_constructible< T >);
                 any_type* new_type = new any_type { data };
                 return static_cast< Base* >(new_type);
-            }
-
-            constexpr void do_destroy() noexcept override {
-                delete this;
             }
 
             constexpr T* get_data() noexcept {
@@ -138,7 +133,7 @@ namespace mr {
 
         constexpr void reset() {
             if (ptr) {
-                ptr->do_destroy();
+                delete ptr;
                 ptr = nullptr;
             }
         }
@@ -152,7 +147,7 @@ namespace mr {
         }
 
         template < class T >
-        constexpr const T* cast() noexcept {
+        constexpr const T* cast_to() noexcept {
             return static_cast< detail::any_type< T >* >(ptr)->get_data();
         }
 

@@ -25,9 +25,8 @@ namespace mr {
 
         constexpr virtual ~constexpr_function_ptr_base() {};
 
-        constexpr virtual constexpr_function_ptr_base* copy() const       = 0;
-        constexpr virtual void                         destroy() noexcept = 0;
-        constexpr virtual Ret                          call(Args&&...)    = 0;
+        constexpr virtual constexpr_function_ptr_base* copy() const    = 0;
+        constexpr virtual Ret                          call(Args&&...) = 0;
     };
 
     template < class Callable, class Ret, class... Args >
@@ -51,10 +50,6 @@ namespace mr {
 
         constexpr Ret call(Args&&... args) override {
             return std::invoke(callable, std::forward< Args >(args)...); // invoke_r C++23
-        }
-
-        constexpr void destroy() noexcept override {
-            delete this;
         }
 
       private:
@@ -118,7 +113,9 @@ namespace mr {
 
         constexpr void finalise() noexcept {
             if (ptr) {
-                ptr->destroy();
+                using C      = int(*)(int, int);
+                auto del_ptr = static_cast< constexpr_function_impl< C, int, int, int >* >(ptr);
+                delete del_ptr;
                 ptr = nullptr;
             }
         }

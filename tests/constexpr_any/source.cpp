@@ -33,19 +33,19 @@ constexpr int constexpr_main() {
     constexpr_any any_as_string = get_string_any();
     constexpr_any any_as_S      = get_S_any();
 
-    auto string_value = any_as_string.cast< const char* >();
+    auto string_value = any_as_string.cast_to< const char* >();
     bool true_1       = '1' == (*string_value)[0];
     bool true_3       = '3' == (*string_value)[1];
     bool false_2      = '2' == *string_value[0];
 
-    auto int_value = any_as_int.cast< int >();
+    auto int_value = any_as_int.cast_to< int >();
 
-    auto S_value = any_as_S.cast< S >();
+    auto S_value = any_as_S.cast_to< S >();
 
     constexpr_any any_as_inplace_S { std::in_place_type< S >, 3 };
-    auto          inplace_S_value = any_as_inplace_S.cast< S >();
+    auto          inplace_S_value = any_as_inplace_S.cast_to< S >();
 
-    // auto error = any_as_inplace_S.cast< int >();
+    // auto error = any_as_inplace_S.cast_to< int >();
 
     return *int_value + S_value->data + true_1 + true_3 + false_2 + inplace_S_value->data;
     // return 4 + 1 + 1 + 1 + 0 + 3 = 10
