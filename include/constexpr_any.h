@@ -68,7 +68,7 @@ namespace mr {
             if (std::is_constant_evaluated()) {
                 data.ptr = rhs.data.ptr->do_copy();
             } else {
-                std::construct_at(std::addressof(get_std_any()), rhs);
+                std::construct_at(std::addressof(get_std_any()), rhs.get_std_any());
             }
         }
 
@@ -163,7 +163,7 @@ namespace mr {
             }
         }
 
-        constexpr void reset() {
+        constexpr void reset() noexcept {
             if (std::is_constant_evaluated()) {
                 if (data.ptr) {
                     delete data.ptr;
@@ -187,7 +187,7 @@ namespace mr {
         }
 
         template < class T >
-        [[nodiscard]] constexpr const T& cast_to() const noexcept {
+        [[nodiscard]] constexpr const T& cast_to() const {
             if (std::is_constant_evaluated()) {
                 return *static_cast< detail::any_type< T >* >(data.ptr)->get_data();
             } else {
@@ -196,7 +196,7 @@ namespace mr {
         }
 
         template < class T >
-        [[nodiscard]] constexpr T& cast_to() noexcept {
+        [[nodiscard]] constexpr T& cast_to() {
             if (std::is_constant_evaluated()) {
                 return *static_cast< detail::any_type< T >* >(data.ptr)->get_data();
             } else {
