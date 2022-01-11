@@ -12,6 +12,6 @@ CTestTestfile.cmake
 /.vs/
 /tests/out/
 /bin/
-/tests/constexpr_any/
-/tests/constexpr_function/
+/tests/constexpr_any/out/
+/tests/constexpr_function/out/
 /build/

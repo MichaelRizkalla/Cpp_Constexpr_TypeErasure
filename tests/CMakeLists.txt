@@ -41,4 +41,3 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC" AND CMAKE_BUILD_TYPE MATCHES "Releas
 endif()
 
 add_subdirectory(constexpr_any)
-#add_subdirectory(constexpr_function)
