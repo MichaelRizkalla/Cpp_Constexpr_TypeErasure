@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <constexpr_any.h>
 #include <stdexcept>
@@ -13,6 +15,8 @@ namespace test_helpers {
 
     struct SmallSizeObject {};
     struct LargeSizeObject {};
+
+    struct UseTemplateCtor {};
 
     template < class Type >
     struct Object {
@@ -31,6 +35,11 @@ namespace test_helpers {
 
         constexpr explicit Object(std::initializer_list< int > vals, float, int) {
             value[0] = *vals.begin();
+        }
+
+        template < class T >
+        constexpr explicit Object(UseTemplateCtor, T val) {
+            value[0] = static_cast< int >(val);
         }
 
         constexpr Object(Object const& rhs) noexcept {
@@ -62,6 +71,18 @@ namespace test_helpers {
         int value[Values] { 0 };
     };
 
+    struct ConvertibleToInt {
+        constexpr ConvertibleToInt(int val) : value(val) {
+        }
+        constexpr ~ConvertibleToInt() = default;
+
+        constexpr operator int() {
+            return value;
+        }
+
+        int value;
+    };
+
     template < class T >
     constexpr bool HasType(const mr::any& Any) {
         return mr::any_cast< T >(&Any) != nullptr;
@@ -81,6 +102,29 @@ namespace test_helpers {
 } // namespace test_helpers
 
 namespace test {
+
+    template < class T >
+    constexpr bool TestDestroy() {
+        union TestType {
+            int     b {};
+            mr::any a;
+
+            constexpr TestType() {};
+            constexpr ~TestType() {};
+        };
+
+        TestType t {};
+        std::construct_at(&t.a, T { 5 });
+        ASSERT(test_helpers::CheckValue< T >(t.a, 5))
+
+#ifndef _MSC_VER
+        std::destroy_at(&t.a);
+#else  // _MSC_VER
+        t.a = mr::any {};
+#endif // _MSC_VER
+        t.b = 10;
+        return true;
+    }
 
     template < class Type1, class Type2 >
     constexpr bool TestCopy() { // Copy assign
@@ -196,13 +240,19 @@ namespace test {
         mr::any a1 {};
         mr::any a2 {};
         mr::any a3 {};
+        mr::any a4 {};
+        mr::any a5 {};
         a1.emplace< T >(1);
         a2.emplace< T >(1.f, 2);
         a3.emplace< T >({ 4, 3, 2 }, 1.f, 2);
+        a4.emplace< T >(test_helpers::UseTemplateCtor {}, 5);
+        a5.emplace< T >(test_helpers::UseTemplateCtor {}, test_helpers::ConvertibleToInt { 6 });
 
         ASSERT(test_helpers::CheckValue< T >(a1, 1))
         ASSERT(test_helpers::CheckValue< T >(a2, 2))
         ASSERT(test_helpers::CheckValue< T >(a3, 4))
+        ASSERT(test_helpers::CheckValue< T >(a4, 5))
+        ASSERT(test_helpers::CheckValue< T >(a5, 6))
 
         return true;
     }
@@ -239,42 +289,93 @@ namespace test {
         return true;
     }
 
-#ifndef _MSC_VER // Reported: https://developercommunity.visualstudio.com/t/constexpr-polymorphism-does-not-work-when-accessin/1634413?
-    static_assert(TestCopy< test_helpers::Object< test_helpers::SmallSizeObject >,
-                            test_helpers::Object< test_helpers::SmallSizeObject > >());
-    static_assert(TestCopy< test_helpers::Object< test_helpers::LargeSizeObject >,
-                            test_helpers::Object< test_helpers::LargeSizeObject > >());
-    static_assert(TestCopy< test_helpers::Object< test_helpers::SmallSizeObject >,
-                            test_helpers::Object< test_helpers::LargeSizeObject > >());
-    static_assert(TestCopy< test_helpers::Object< test_helpers::LargeSizeObject >,
-                            test_helpers::Object< test_helpers::SmallSizeObject > >());
-#endif // _MSC_VER
+    template < class T >
+    constexpr T GetMaxValues(std::initializer_list< mr::any > values) {
+        return mr::any_cast< T >(
+            *std::max_element(values.begin(), values.end(), [](const mr::any& rhs, const mr::any& lhs) {
+                const T rhs_t = mr::any_cast< T >(rhs);
+                const T lhs_t = mr::any_cast< T >(lhs);
+                return rhs_t < lhs_t;
+            }));
+    }
 
-    static_assert(TestMove< test_helpers::Object< test_helpers::SmallSizeObject >,
-                            test_helpers::Object< test_helpers::SmallSizeObject > >());
-    static_assert(TestMove< test_helpers::Object< test_helpers::LargeSizeObject >,
-                            test_helpers::Object< test_helpers::LargeSizeObject > >());
-    static_assert(TestMove< test_helpers::Object< test_helpers::SmallSizeObject >,
-                            test_helpers::Object< test_helpers::LargeSizeObject > >());
-    static_assert(TestMove< test_helpers::Object< test_helpers::LargeSizeObject >,
-                            test_helpers::Object< test_helpers::SmallSizeObject > >());
-
-    static_assert(MoveAssignNoExcept());
-
-    static_assert(EmplaceTests< test_helpers::Object< test_helpers::SmallSizeObject > >());
-    static_assert(EmplaceTests< test_helpers::Object< test_helpers::LargeSizeObject > >());
-
-    static_assert(CastTests< int >());
-    static_assert(CastTests< float >());
+    template < class T >
+    constexpr int Strlen(const mr::any& str /* any string type */) {
 #ifdef __cpp_lib_constexpr_string
-    static_assert(CastTests< std::string >());
+        if constexpr (std::is_same_v< T, std::string >) {
+            return mr::any_cast< std::string >(&str)->size();
+        } else
 #endif // __cpp_lib_constexpr_string
-#ifdef __cpp_lib_constexpr_vector
-    static_assert(CastTests< std::vector< int > >());
-#endif // __cpp_lib_constexpr_vector
+            if constexpr (std::is_same_v< T, std::string_view >) {
+            return mr::any_cast< std::string_view >(&str)->size();
+        } else {
+            auto myStr = mr::any_cast< const char* >(str);
+            int  len   = 0;
+            while (*myStr != '\0') {
+                ++len;
+                ++myStr;
+            }
+            return len;
+        }
+    }
 
 } // namespace test
 
+static_assert(test::TestDestroy< test_helpers::Object< test_helpers::SmallSizeObject > >());
+static_assert(test::TestDestroy< test_helpers::Object< test_helpers::LargeSizeObject > >());
+
+#ifndef _MSC_VER // Reported:
+                 // https://developercommunity.visualstudio.com/t/constexpr-polymorphism-does-not-work-when-accessin/1634413
+static_assert(test::TestCopy< test_helpers::Object< test_helpers::SmallSizeObject >,
+                              test_helpers::Object< test_helpers::SmallSizeObject > >());
+static_assert(test::TestCopy< test_helpers::Object< test_helpers::LargeSizeObject >,
+                              test_helpers::Object< test_helpers::LargeSizeObject > >());
+static_assert(test::TestCopy< test_helpers::Object< test_helpers::SmallSizeObject >,
+                              test_helpers::Object< test_helpers::LargeSizeObject > >());
+static_assert(test::TestCopy< test_helpers::Object< test_helpers::LargeSizeObject >,
+                              test_helpers::Object< test_helpers::SmallSizeObject > >());
+#endif // _MSC_VER
+
+static_assert(test::TestMove< test_helpers::Object< test_helpers::SmallSizeObject >,
+                              test_helpers::Object< test_helpers::SmallSizeObject > >());
+static_assert(test::TestMove< test_helpers::Object< test_helpers::LargeSizeObject >,
+                              test_helpers::Object< test_helpers::LargeSizeObject > >());
+static_assert(test::TestMove< test_helpers::Object< test_helpers::SmallSizeObject >,
+                              test_helpers::Object< test_helpers::LargeSizeObject > >());
+static_assert(test::TestMove< test_helpers::Object< test_helpers::LargeSizeObject >,
+                              test_helpers::Object< test_helpers::SmallSizeObject > >());
+
+static_assert(test::MoveAssignNoExcept());
+
+static_assert(test::EmplaceTests< test_helpers::Object< test_helpers::SmallSizeObject > >());
+static_assert(test::EmplaceTests< test_helpers::Object< test_helpers::LargeSizeObject > >());
+
+static_assert(test::CastTests< int >());
+static_assert(test::CastTests< float >());
+#ifdef __cpp_lib_constexpr_string
+static_assert(test::CastTests< std::string >());
+#endif // __cpp_lib_constexpr_string
+#ifdef __cpp_lib_constexpr_vector
+static_assert(test::CastTests< std::vector< int > >());
+#endif // __cpp_lib_constexpr_vector
+static_assert(test::CastTests< std::array< int, 10 > >());
+
+static_assert(test::GetMaxValues< int >({ 1, 2, 3, 4, 9, 5, 6 }) == 9);
+static_assert(test::GetMaxValues< std::uint64_t >({ std::uint64_t { 10 }, std::uint64_t { 2 }, std::uint64_t { 31 },
+                                                    std::uint64_t { 44 }, std::uint64_t { 19 }, std::uint64_t { 75 },
+                                                    std::uint64_t { 46 } }) == std::uint64_t { 75 });
+
+static_assert(test::Strlen< const char* >("this is const char* string") == 26);
+namespace {
+    using namespace std::literals::string_view_literals;
+    static_assert(test::Strlen< std::string_view >("this is std::string_view string"sv) == 31);
+} // namespace
+
+#ifdef __cpp_lib_constexpr_string
+static_assert(test::Strlen< std::string >(std::string { "small string" }) == 12);
+static_assert(test::Strlen< std::string >(std::string {
+                  "A large string that will not fit into a small string optimization!" }) == 66);
+#endif // __cpp_lib_constexpr_string
+
 int main() {
 }
-
