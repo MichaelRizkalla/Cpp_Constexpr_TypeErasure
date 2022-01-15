@@ -61,6 +61,15 @@ namespace mr {
             T data;
         };
 
+        // constexpr std::type_info-like utility
+        template < class T >
+        inline static constexpr std::uint8_t Type_id = 0;
+
+        template < class T >
+        static constexpr const std::uint8_t* GetTypeId() noexcept {
+            return std::addressof(Type_id< std::decay_t< T > >);
+        }
+
     } // namespace detail
 
     class [[nodiscard]] any {
@@ -71,7 +80,8 @@ namespace mr {
             if (std::addressof(rhs) != this) {
                 if (std::is_constant_evaluated()) {
                     if (rhs.has_value()) {
-                        data.ptr = rhs.data.ptr->do_copy();
+                        data.constexprData.ptr = rhs.data.constexprData.ptr->do_copy();
+                        data.constexprData.id  = rhs.data.constexprData.id;
                     }
                 } else {
                     std::construct_at(std::addressof(get_std_any()), rhs.get_std_any());
@@ -176,9 +186,10 @@ namespace mr {
 
         constexpr void reset() noexcept {
             if (std::is_constant_evaluated()) {
-                if (data.ptr) {
-                    data.ptr->do_destroy();
-                    data.ptr = nullptr;
+                if (data.constexprData.ptr) {
+                    data.constexprData.ptr->do_destroy();
+                    data.constexprData.ptr = nullptr;
+                    data.constexprData.id  = 0;
                 }
             } else {
                 get_std_any().reset();
@@ -191,7 +202,7 @@ namespace mr {
 
         [[nodiscard]] constexpr bool has_value() const noexcept {
             if (std::is_constant_evaluated()) {
-                return static_cast< bool >(data.ptr);
+                return static_cast< bool >(data.constexprData.ptr);
             } else {
                 return get_std_any().has_value();
             }
@@ -200,8 +211,8 @@ namespace mr {
         template < class T >
         [[nodiscard]] constexpr const T* cast_to() const noexcept {
             if (std::is_constant_evaluated()) {
-                if (has_value()) {
-                    return static_cast< detail::any_type< T >* >(data.ptr)->get_data();
+                if (data.constexprData.id == detail::GetTypeId< T >()) {
+                    return static_cast< detail::any_type< T >* >(data.constexprData.ptr)->get_data();
                 }
                 return nullptr;
             } else {
@@ -212,8 +223,8 @@ namespace mr {
         template < class T >
         [[nodiscard]] constexpr T* cast_to() noexcept {
             if (std::is_constant_evaluated()) {
-                if (has_value()) {
-                    return static_cast< detail::any_type< T >* >(data.ptr)->get_data();
+                if (data.constexprData.id == detail::GetTypeId< T >()) {
+                    return static_cast< detail::any_type< T >* >(data.constexprData.ptr)->get_data();
                 }
                 return nullptr;
             } else {
@@ -243,18 +254,30 @@ namespace mr {
         }
 
       private:
+        struct ConstexprData {
+            constexpr ConstexprData() : ptr(nullptr), id(nullptr) {
+            }
+            constexpr ~ConstexprData() {
+            }
+
+            detail::any_type_base* ptr;
+            const std::uint8_t*    id;
+        };
+
         template < class DType, class... Args >
         inline constexpr DType& do_emplace(Args&&... args) {
             detail::any_type< DType >* type = new detail::any_type< DType >(std::forward< Args >(args)...);
-            data.ptr                        = type;
+            data.constexprData.ptr          = type;
+            data.constexprData.id           = detail::GetTypeId< DType >();
             return *(type->get_data());
         }
 
         inline constexpr void move_from(any&& val) noexcept {
             if (std::is_constant_evaluated()) {
-                data.ptr = std::exchange(val.data.ptr, nullptr);
+                data.constexprData = std::exchange(val.data.constexprData, ConstexprData {});
             } else {
-                get_std_any() = std::move(val.data.any);
+                get_std_any() = std::move(val.get_std_any());
+                val.get_std_any().reset(); // ensure that the moved-from object is empty
             }
         }
 
@@ -267,13 +290,13 @@ namespace mr {
         }
 
         union Data {
-            std::max_align_t       align;
-            detail::any_type_base* ptr;
-            char                   any[sizeof(std::any)];
+            std::max_align_t align;
+            ConstexprData    constexprData;
+            char             any[sizeof(std::any)];
 
             constexpr Data() {
                 if (std::is_constant_evaluated()) {
-                    ptr = nullptr;
+                    std::construct_at(&constexprData);
                 } else {
                     std::construct_at(reinterpret_cast< std::any* >(&any));
                 }
