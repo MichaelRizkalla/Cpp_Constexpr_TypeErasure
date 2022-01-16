@@ -330,8 +330,6 @@ namespace test {
 static_assert(test::TestDestroy< test_helpers::Object< test_helpers::SmallSizeObject > >());
 static_assert(test::TestDestroy< test_helpers::Object< test_helpers::LargeSizeObject > >());
 
-#ifndef _MSC_VER // Reported:
-                 // https://developercommunity.visualstudio.com/t/constexpr-polymorphism-does-not-work-when-accessin/1634413
 static_assert(test::TestCopy< test_helpers::Object< test_helpers::SmallSizeObject >,
                               test_helpers::Object< test_helpers::SmallSizeObject > >());
 static_assert(test::TestCopy< test_helpers::Object< test_helpers::LargeSizeObject >,
@@ -340,7 +338,6 @@ static_assert(test::TestCopy< test_helpers::Object< test_helpers::SmallSizeObjec
                               test_helpers::Object< test_helpers::LargeSizeObject > >());
 static_assert(test::TestCopy< test_helpers::Object< test_helpers::LargeSizeObject >,
                               test_helpers::Object< test_helpers::SmallSizeObject > >());
-#endif // _MSC_VER
 
 static_assert(test::TestMove< test_helpers::Object< test_helpers::SmallSizeObject >,
                               test_helpers::Object< test_helpers::SmallSizeObject > >());
