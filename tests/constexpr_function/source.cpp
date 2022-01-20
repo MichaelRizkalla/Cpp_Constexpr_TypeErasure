@@ -2,6 +2,7 @@
 #include <constexpr_any.h>
 #include <constexpr_function.h>
 #include <functional>
+#include <iostream>
 #include <vector>
 
 #define CONSTEXPR_ASSERT(x) \
@@ -16,13 +17,6 @@ namespace test {
         T op {};
         return op(lhs, rhs);
     }
-
-    enum class Op : int
-    {
-        Add,
-        Minus,
-        Multiply,
-    };
 
     template < class T >
     struct ACallable {
@@ -75,6 +69,22 @@ namespace test {
 
             mr::function< int(int, int) > ff = [](int x, int y) { return x + y; };
             CONSTEXPR_ASSERT(ff(1, 2) == 3);
+
+            int                      Value = 3;
+            mr::function< int(int) > f3 =
+                std::bind([](int x, int y) { return x - y; }, std::placeholders::_1, std::ref(Value));
+
+            CONSTEXPR_ASSERT(f3(5) == 2);
+            Value = 10;
+            CONSTEXPR_ASSERT(f3(5) == -5);
+
+            mr::function< int(const mr::any&, const mr::any&) > f4 = [](const mr::any& x, const mr::any& y) -> int {
+                auto x_value = *mr::any_cast< int >(std::addressof(x));
+                auto y_value = *mr::any_cast< int >(std::addressof(y));
+
+                return x_value + y_value;
+            };
+            CONSTEXPR_ASSERT(f4(5, 5) == 10);
         }
 
         // member function
@@ -82,6 +92,18 @@ namespace test {
             auto f1 =
                 mr::function< int(ACallable< std::plus< int > >, int, int) > { &ACallable< std::plus< int > >::Do };
             CONSTEXPR_ASSERT(f1(ACallable< std::plus< int > > {}, 1, 2) == 3);
+
+            ACallable< std::minus< int > > obj_minus {};
+            auto f2 = mr::function< int(int, int) > { std::bind(&ACallable< std::minus< int > >::Do, obj_minus,
+                                                                std::placeholders::_1, std::placeholders::_2) };
+            CONSTEXPR_ASSERT(f2(1, 2) == -1);
+
+            ACallable< std::multiplies< int > > obj_multiply {};
+            auto f3 = mr::function< int(const mr::any&, int) > { [&](const mr::any& lhs, int rhs) -> int {
+                return std::bind(&ACallable< std::multiplies< int > >::Do, obj_multiply, std::placeholders::_1,
+                                 std::placeholders::_2)(mr::any_cast< int >(lhs), rhs);
+            } };
+            CONSTEXPR_ASSERT(f3(6, 3) == 18);
         }
 
         return true;
