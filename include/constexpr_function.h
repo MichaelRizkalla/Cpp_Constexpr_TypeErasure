@@ -41,7 +41,9 @@ namespace mr {
 
         template < class Callable >
         struct constexpr_function_data_t : constexpr_function_storage_t {
-            constexpr constexpr_function_data_t(Callable* callable_) noexcept : callable(callable_) {
+            template < class... Args >
+            constexpr constexpr_function_data_t(Args&&... args) noexcept :
+                callable(new Callable { std::forward< Args >(args)... }) {
             }
             constexpr ~constexpr_function_data_t() noexcept {
                 delete callable;
@@ -57,7 +59,7 @@ namespace mr {
             return static_cast< constexpr_function_data_t< T >* >(ptr)->callable;
         }
         template < class T >
-        constexpr const T* get_constexpr_function_data_as(const constexpr_function_storage_t* ptr) noexcept {
+        constexpr T* get_constexpr_function_data_as(const constexpr_function_storage_t* ptr) noexcept {
             return static_cast< const constexpr_function_data_t< T >* >(ptr)->callable;
         }
 
@@ -92,14 +94,14 @@ namespace mr {
                 return get_constexpr_function_data_as< Callable >(In.data);
             }
             template < class Callable >
-            static constexpr const Callable* get_function_pointer(const constexpr_function_base& In) noexcept {
+            static constexpr Callable* get_function_pointer(const constexpr_function_base& In) noexcept {
                 return get_constexpr_function_data_as< Callable >(In.data);
             }
 
             template < class Callable, class Fn >
             static constexpr void create(constexpr_function_base& In, Fn&& In_callable) {
                 constexpr_function_base::finalize< Callable >(In);
-                In.data = new constexpr_function_data_t< Callable > { new Callable(std::forward< Fn >(In_callable)) };
+                In.data = new constexpr_function_data_t< Callable > { std::forward< Fn >(In_callable) };
             }
 
             template < class Callable >
@@ -185,7 +187,8 @@ namespace mr {
 
             template < class Callable >
             static constexpr Ret Do_call(const Base* In, Args&&... Types) {
-                return std::invoke(*Base::get_function_pointer< Callable >(*In), std::forward< Args >(Types)...);
+                Callable& callable = *Base::get_function_pointer< Callable >(*In);
+                return std::invoke(callable, std::forward< Args >(Types)...);
             }
 
             constexpr Ret operator()(Args... Types) const {
@@ -198,7 +201,7 @@ namespace mr {
         template < class NotFn >
         struct get_constexpr_function_base {
             static_assert(Eval_function_to_false< NotFn >,
-                          "Incorrect behaviour: non-function type was passed to std::function!");
+                          "Incorrect behaviour: non-function type was passed to mr::function!");
         };
         template < class Ret, class... Args >
         struct get_constexpr_function_base< Ret(Args...) > {
@@ -206,7 +209,8 @@ namespace mr {
         };
         template < class Ret, class... Args >
         struct get_constexpr_function_base< Ret(Args...) noexcept > {
-            using type = constexpr_function_impl< Ret, Args... >; // TODO: add noexcept
+            static_assert(Eval_function_to_false< Ret(Args...) noexcept >,
+                          "Incorrect behaviour: noexcept type was passed to mr::function!");
         };
 
         namespace {
@@ -321,11 +325,15 @@ namespace mr {
     } // namespace detail
 
     template < class F >
-    class function : public detail::get_constexpr_function_base< F >::type {
+    class function : protected detail::get_constexpr_function_base< F >::type {
         using Base = typename detail::get_constexpr_function_base< F >::type;
 
       public:
         using result_type = typename Base::Res;
+
+        using Base::operator();
+
+        constexpr function() noexcept {};
 
         constexpr function(std::nullptr_t) noexcept {};
 
@@ -340,13 +348,13 @@ namespace mr {
         }
 
         constexpr function(function&& Val) noexcept {
-            Base::call       = Val.call;
-            Base::do_op      = Val.do_op;
-            Base::get_typeId = Val.get_typeId;
-            Base::data       = std::move(Val.data);
+            Base::call       = std::exchange(Val.call, nullptr);
+            Base::do_op      = std::exchange(Val.do_op, nullptr);
+            Base::get_typeId = std::exchange(Val.get_typeId, nullptr);
+            Base::data       = std::exchange(Val.data, nullptr);
         }
 
-        template < class Callable, std::enable_if_t< Base::template is_valid_v< Callable, function >, int > = 0 >
+        template < class Callable, std::enable_if_t< Base::template is_valid_v< Callable, function< F > >, int > = 0 >
         constexpr function(Callable&& Val) {
             static_assert(std::is_copy_constructible_v< std::decay_t< Callable > >,
                           "Callable must be copy-constructible");
@@ -367,6 +375,10 @@ namespace mr {
         constexpr ~function() {
             if (!Base::is_empty()) {
                 Base::do_op(*this, *this, detail::constexpr_function_op::Destroy);
+                Base::call       = nullptr;
+                Base::data       = nullptr;
+                Base::do_op      = nullptr;
+                Base::get_typeId = nullptr;
             }
         }
 
@@ -375,8 +387,8 @@ namespace mr {
             return *this;
         }
 
-        constexpr function& operator=(function&& Val) {
-            function(std::move(Val)).swap(*this);
+        constexpr function& operator=(function&& Val) noexcept {
+            Val.swap(*this);
             return *this;
         }
 
@@ -424,8 +436,8 @@ namespace mr {
 
         template < typename Callable >
         constexpr const Callable* target() const noexcept {
-            if (Base::get_typeId() == std::addressof(detail::constexpr_function_data_t< Callable >::Type_id) &&
-                !Base::is_empty()) {
+            using Callable_t = typename Base::template constexpr_func_impl_callable_t< Callable >;
+            if (Base::get_typeId() == Base::template GetTypeID< Callable_t >() && !Base::is_empty()) {
                 detail::constexpr_function_base Res {};
                 Base::do_op(*static_cast< detail::constexpr_function_base* >(const_cast< function< F >* >(this)), Res,
                             detail::constexpr_function_op::Get_fn_ptr);
