@@ -311,7 +311,6 @@ namespace mr {
         }
 
         union Data {
-            std::max_align_t align;
             ConstexprData    constexprData;
             char             any[sizeof(std::any)];
 
@@ -326,9 +325,8 @@ namespace mr {
             constexpr ~Data() {
             }
         };
-        // Incorrect assertion
-        // It seems libstdc++ is implementing std::any with size: 2 * sizeof(void*)
-        // static_assert(sizeof(Data) <= sizeof(std::any));
+
+        static_assert(sizeof(Data) == sizeof(std::any));
 
         Data data {};
     };
